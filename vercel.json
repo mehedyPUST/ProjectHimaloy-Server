@@ -11,12 +11,5 @@
             "src": "/(.*)",
             "dest": "index.js"
         }
-    ],
-    "env": {
-        "MONGODB_URI": "@mongodb-uri",
-        "MONGODB_DB": "@mongodb-db",
-        "FRONTEND_URL": "@frontend-url",
-        "EMAIL_USER": "@email-user",
-        "EMAIL_APP_PASSWORD": "@email-app-password"
-    }
+    ]
 }
