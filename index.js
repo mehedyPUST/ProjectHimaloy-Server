@@ -214,37 +214,6 @@ app.get('/api/users/:id', async (req, res) => {
 // server/index.js - Add this before EXPORT
 // server/index.js
 app.patch('/api/admin/make-manager/:id', async (req, res) => {
-    try {
-        await connectDB();
-        const { id } = req.params;
-
-        if (!ObjectId.isValid(id)) {
-            return res.status(400).json({ success: false, message: 'Invalid ID' });
-        }
-
-        // ✅ Step 1: ALL users - isManager = false
-        await userCollection.updateMany(
-            { isManager: true },
-            { $set: { isManager: false, role: 'member', updatedAt: new Date() } }
-        );
-
-        // ✅ Step 2: Selected user - isManager = true
-        await userCollection.updateOne(
-            { _id: new ObjectId(id) },
-            { $set: { isManager: true, role: 'manager', updatedAt: new Date() } }
-        );
-
-        const user = await userCollection.findOne({ _id: new ObjectId(id) });
-
-        res.json({ 
-            success: true, 
-            message: `${user?.name || 'Member'} is now the manager` 
-        });
-    } catch (error) {
-        console.error('Error updating manager:', error);
-        res.status(500).json({ success: false, message: 'Failed to update manager' });
-    }
-});
 app.patch('/api/users/:id', async (req, res) => {
     try {
         await connectDB();
