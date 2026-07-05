@@ -97,7 +97,7 @@ async function connectDB() {
     try {
         if (client && db) return;
         await client.connect();
-        db = client.db(process.env.MONGODB_DB || 'Project-Himaloy');
+        db = client.db(process.env.MONGODB_DB);
 
         userCollection = db.collection('user');
         collectionsCollection = db.collection('monthly_deposits');
