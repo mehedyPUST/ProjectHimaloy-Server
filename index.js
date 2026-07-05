@@ -1,11 +1,10 @@
-// server/index.js (FULL BACKEND WITH EMAIL)
+// server/index.js (FULL BACKEND)
 const express = require('express');
-
 const app = express();
 const cors = require('cors');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config();
-require('./utils/cornJobs');
+require('./utils/cronJobs');
 const emailService = require('./utils/emailService');
 
 // ============================================================
@@ -16,8 +15,8 @@ app.use(cors({
     origin: [
         'http://localhost:3000',
         'http://localhost:5000',
-        'https://project-himaloy-client.vercel.app',    // ✅ Add this
-        'https://project-himaloy-server.vercel.app',    // ✅ Add this
+        'https://project-himaloy-client.vercel.app',
+        'https://project-himaloy-server.vercel.app',
         process.env.FRONTEND_URL,
         process.env.BETTER_AUTH_URL
     ].filter(Boolean),
@@ -25,6 +24,7 @@ app.use(cors({
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 app.use(express.json());
 
 // ============================================================
@@ -118,9 +118,7 @@ async function populateMemberNames(items, memberIdField = 'member_id') {
 }
 
 async function getManagerEmail() {
-    const cycle = await managerCyclesCollection.findOne({ active: true });
-    if (!cycle) return null;
-    const manager = await userCollection.findOne({ _id: new ObjectId(cycle.manager_id) });
+    const manager = await userCollection.findOne({ isManager: true });
     return manager?.email || null;
 }
 
@@ -130,11 +128,8 @@ async function getAllMemberEmails() {
 }
 
 async function getUserById(userId) {
-    try {
-        return await userCollection.findOne({ _id: new ObjectId(userId) });
-    } catch {
-        return null;
-    }
+    try { return await userCollection.findOne({ _id: new ObjectId(userId) }); } 
+    catch { return null; }
 }
 
 // ============================================================
@@ -155,8 +150,8 @@ app.get('/api/users', async (req, res) => {
             ];
         }
         if (role) query.role = role;
-        if (status === 'active') query.active = true;
-        if (status === 'blocked') query.active = false;
+        if (status === 'active') query.isBlocked = false;
+        if (status === 'blocked') query.isBlocked = true;
 
         const totalCount = await userCollection.countDocuments(query);
         const users = await userCollection.find(query).skip(skip).limit(parseInt(limit)).toArray();
@@ -165,33 +160,6 @@ app.get('/api/users', async (req, res) => {
         res.json({ success: true, users: safeUsers, total: totalCount });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Failed to fetch users' });
-    }
-});
-
-
-// server/index.js
-app.patch('/api/admin/remove-manager/:id', async (req, res) => {
-    try {
-        await connectDB();
-        const { id } = req.params;
-
-        if (!ObjectId.isValid(id)) {
-            return res.status(400).json({ success: false, message: 'Invalid ID' });
-        }
-
-        await userCollection.updateOne(
-            { _id: new ObjectId(id) },
-            { $set: { isManager: false, role: 'member', updatedAt: new Date() } }
-        );
-
-        const user = await userCollection.findOne({ _id: new ObjectId(id) });
-
-        res.json({ 
-            success: true, 
-            message: `${user?.name || 'Member'} removed from manager role` 
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, message: 'Failed' });
     }
 });
 
@@ -211,14 +179,11 @@ app.get('/api/users/:id', async (req, res) => {
     }
 });
 
-// server/index.js - Add this before EXPORT
-// server/index.js
-app.patch('/api/admin/make-manager/:id', async (req, res) => {
 app.patch('/api/users/:id', async (req, res) => {
     try {
         await connectDB();
         const { id } = req.params;
-        const { name, phone, dateOfBirth, image, role, active } = req.body;
+        const { name, phone, dateOfBirth, image, role, isBlocked } = req.body;
         let query = {};
         if (ObjectId.isValid(id)) query._id = new ObjectId(id);
         else query._id = id;
@@ -229,51 +194,81 @@ app.patch('/api/users/:id', async (req, res) => {
         if (dateOfBirth !== undefined) updateData.dateOfBirth = dateOfBirth;
         if (image !== undefined) updateData.image = image;
         if (role !== undefined) updateData.role = role;
-        if (active !== undefined) updateData.active = active;
+        if (isBlocked !== undefined) updateData.isBlocked = isBlocked;
 
         const result = await userCollection.updateOne(query, { $set: updateData });
         if (result.matchedCount === 0) return res.status(404).json({ success: false, message: 'User not found' });
-        res.json({ success: true, message: 'Profile updated' });
+        res.json({ success: true, message: 'Updated' });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Failed to update user' });
     }
 });
 
 // ============================================================
-// ==================== MANAGER ACCOUNTS =======================
+// ==================== ADMIN MANAGER APIS =====================
 // ============================================================
 
-app.post('/api/admin/create-manager-account', async (req, res) => {
+app.patch('/api/admin/make-manager/:id', async (req, res) => {
     try {
         await connectDB();
-        const { email, password } = req.body;
+        const { id } = req.params;
+        if (!ObjectId.isValid(id)) return res.status(400).json({ success: false, message: 'Invalid ID' });
 
-        const existing = await managerAccountsCollection.findOne({ email });
-        if (existing) return res.status(400).json({ success: false, message: 'Manager account already exists' });
+        await userCollection.updateMany(
+            { isManager: true },
+            { $set: { isManager: false, role: 'member', updatedAt: new Date() } }
+        );
 
-        const bcrypt = require('bcryptjs');
-        const hashedPassword = await bcrypt.hash(password, 10);
+        await userCollection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { isManager: true, role: 'manager', updatedAt: new Date() } }
+        );
 
-        await managerAccountsCollection.insertOne({
-            email, password: hashedPassword,
-            current_user_id: null, current_user_name: null,
-            cycle_number: 0, active: false,
-            created_at: new Date(), updated_at: new Date()
+        await managerCyclesCollection.updateMany(
+            { active: true },
+            { $set: { active: false, end_date: new Date().toISOString().split('T')[0], updatedAt: new Date() } }
+        );
+
+        const lastCycle = await managerCyclesCollection.findOne({}, { sort: { cycle_number: -1 } });
+        const cycleNumber = (lastCycle?.cycle_number || 0) + 1;
+        const startDate = new Date().toISOString().split('T')[0];
+        const endDate = new Date();
+        endDate.setMonth(endDate.getMonth() + 6);
+
+        await managerCyclesCollection.insertOne({
+            manager_id: id, cycle_number: cycleNumber,
+            start_date: startDate, end_date: endDate.toISOString().split('T')[0],
+            total_collection: 0, total_loans_disbursed: 0, total_savings_generated: 0,
+            active: true, created_at: new Date()
         });
 
-        res.status(201).json({ success: true, message: 'Manager account created' });
+        const user = await userCollection.findOne({ _id: new ObjectId(id) });
+        res.json({ success: true, message: `${user?.name || 'Member'} is now the manager` });
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Failed to create manager account' });
+        res.status(500).json({ success: false, message: 'Failed' });
     }
 });
 
-app.get('/api/manager-accounts', async (req, res) => {
+app.patch('/api/admin/remove-manager/:id', async (req, res) => {
     try {
         await connectDB();
-        const accounts = await managerAccountsCollection.find().toArray();
-        res.json({ success: true, accounts });
+        const { id } = req.params;
+        if (!ObjectId.isValid(id)) return res.status(400).json({ success: false, message: 'Invalid ID' });
+
+        await userCollection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { isManager: false, role: 'member', updatedAt: new Date() } }
+        );
+
+        await managerCyclesCollection.updateMany(
+            { active: true, manager_id: id },
+            { $set: { active: false, end_date: new Date().toISOString().split('T')[0], updatedAt: new Date() } }
+        );
+
+        const user = await userCollection.findOne({ _id: new ObjectId(id) });
+        res.json({ success: true, message: `${user?.name || 'Member'} removed from manager role` });
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Failed to fetch manager accounts' });
+        res.status(500).json({ success: false, message: 'Failed' });
     }
 });
 
@@ -293,48 +288,32 @@ app.post('/api/deposits/pay', async (req, res) => {
         const depositMonth = `${year}-${month}`;
 
         const deposit = {
-            member_id: memberId,
-            month: depositMonth,
+            member_id: memberId, month: depositMonth,
             date: date || new Date().toISOString().split('T')[0],
             paid_through: paidThrough,
             transaction_id: paidThrough === 'hand-cash' ? '-' : (transactionId || '-'),
-            amount: parseInt(amount),
-            note: note || '',
-            status: 'pending',
-            created_at: new Date(),
-            updated_at: new Date()
+            amount: parseInt(amount), note: note || '',
+            status: 'pending', created_at: new Date(), updated_at: new Date()
         };
 
         const result = await collectionsCollection.insertOne(deposit);
 
         await transactionHistoryCollection.insertOne({
-            type: 'deposit',
-            member_id: memberId,
-            amount: parseInt(amount),
-            month: depositMonth,
-            date: date || new Date().toISOString().split('T')[0],
-            method: paidThrough,
-            txn_id: deposit.transaction_id,
-            status: 'pending',
-            created_at: new Date()
+            type: 'deposit', member_id: memberId, amount: parseInt(amount),
+            month: depositMonth, date: date || new Date().toISOString().split('T')[0],
+            method: paidThrough, txn_id: deposit.transaction_id,
+            status: 'pending', created_at: new Date()
         });
 
-        // 📧 EMAIL: Notify manager about new deposit
         const managerEmail = await getManagerEmail();
         if (managerEmail) {
             try {
                 await emailService.sendDepositRequestToManager(managerEmail, {
-                    memberName: member?.name || 'Member',
-                    month: depositMonth,
-                    amount: parseInt(amount),
-                    method: paidThrough,
-                    txnId: deposit.transaction_id,
-                    date: new Date(),
-                    note: note || '',
+                    memberName: member?.name || 'Member', month: depositMonth,
+                    amount: parseInt(amount), method: paidThrough,
+                    txnId: deposit.transaction_id, date: new Date(), note: note || '',
                 });
-            } catch (emailError) {
-                console.error('Email error (deposit to manager):', emailError.message);
-            }
+            } catch (e) { console.error('Email error:', e.message); }
         }
 
         res.status(201).json({ success: true, message: 'Deposit request submitted', deposit: { ...deposit, _id: result.insertedId } });
@@ -361,7 +340,6 @@ app.get('/api/deposits', async (req, res) => {
         let query = {};
         if (status && status !== 'all') query.status = status;
         if (month) query.month = month;
-
         const deposits = await collectionsCollection.find(query).sort({ created_at: -1 }).toArray();
         const depositsWithMembers = await populateMemberNames(deposits);
         res.json({ success: true, deposits: depositsWithMembers });
@@ -385,20 +363,16 @@ app.patch('/api/deposits/:id/confirm', async (req, res) => {
             { $set: { status: newStatus, confirmed_by: managerId, confirmed_at: new Date(), updated_at: new Date() } }
         );
 
-        // 📧 EMAIL: Notify member about confirmation
         if (newStatus === 'confirmed' && deposit) {
             const member = await getUserById(deposit.member_id);
             if (member?.email) {
                 try {
                     await emailService.sendDepositConfirmed(member.email, {
-                        month: deposit.month,
-                        amount: deposit.amount,
+                        month: deposit.month, amount: deposit.amount,
                         date: deposit.date || new Date().toISOString().split('T')[0],
                         method: deposit.paid_through || 'N/A',
                     });
-                } catch (emailError) {
-                    console.error('Email error (deposit confirmed):', emailError.message);
-                }
+                } catch (e) { console.error('Email error:', e.message); }
             }
         }
 
@@ -451,20 +425,14 @@ app.post('/api/loans/request', async (req, res) => {
 
         const result = await loanRequestsCollection.insertOne(loanRequest);
 
-        // 📧 EMAIL: Notify manager about new loan request
         const managerEmail = await getManagerEmail();
         if (managerEmail) {
             try {
                 await emailService.sendLoanRequestToManager(managerEmail, {
-                    memberName: member?.name || 'Member',
-                    amount: parseInt(amount),
-                    tenure: parseInt(tenure),
-                    reason: reason,
-                    date: new Date(),
+                    memberName: member?.name || 'Member', amount: parseInt(amount),
+                    tenure: parseInt(tenure), reason: reason, date: new Date(),
                 });
-            } catch (emailError) {
-                console.error('Email error (loan request):', emailError.message);
-            }
+            } catch (e) { console.error('Email error:', e.message); }
         }
 
         res.status(201).json({ success: true, message: 'Loan request submitted', loanRequest: { ...loanRequest, _id: result.insertedId } });
@@ -565,7 +533,6 @@ app.get('/api/votings', async (req, res) => {
     try {
         await connectDB();
         const votings = await loanVotingsCollection.find().sort({ created_at: -1 }).toArray();
-
         const allMemberIds = [];
         votings.forEach(v => v.votes.forEach(vote => allMemberIds.push(vote.member_id)));
         const members = await userCollection.find({
@@ -590,7 +557,6 @@ app.post('/api/loans/requests/:id/vote', async (req, res) => {
         await connectDB();
         const { id } = req.params;
         const { memberId, vote, reason } = req.body;
-
         if (!vote || !['approve', 'deny'].includes(vote)) {
             return res.status(400).json({ success: false, message: 'Invalid vote' });
         }
@@ -659,21 +625,15 @@ app.patch('/api/votings/:id/close', async (req, res) => {
                     { $set: { status: 'approved', updated_at: new Date() } }
                 );
 
-                // 📧 EMAIL: Notify member about loan approval
                 const member = await getUserById(loanRequest.member_id);
                 if (member?.email) {
                     try {
                         await emailService.sendLoanApprovedToMember(member.email, {
-                            loanId: voting.loan_request_id,
-                            amount: loanRequest.amount,
-                            tenure: loanRequest.tenure,
-                            totalInstallments: loan.total_installments,
-                            installmentAmount: installmentAmount,
-                            savingsAmount: loan.savings_amount,
+                            loanId: voting.loan_request_id, amount: loanRequest.amount,
+                            tenure: loanRequest.tenure, totalInstallments: loan.total_installments,
+                            installmentAmount: installmentAmount, savingsAmount: loan.savings_amount,
                         });
-                    } catch (emailError) {
-                        console.error('Email error (loan approved):', emailError.message);
-                    }
+                    } catch (e) { console.error('Email error:', e.message); }
                 }
             }
         }
@@ -706,17 +666,13 @@ app.post('/api/meetings', async (req, res) => {
         };
         const result = await meetingsCollection.insertOne(meeting);
 
-        // 📧 EMAIL: Notify all members about meeting
         const allMembers = await getAllMemberEmails();
         if (allMembers.length > 0) {
             try {
                 await emailService.sendMeetingNotification(allMembers, {
-                    title, date, time, location, agenda,
-                    loanRequestId: loanRequestId || null,
+                    title, date, time, location, agenda, loanRequestId: loanRequestId || null,
                 });
-            } catch (emailError) {
-                console.error('Email error (meeting):', emailError.message);
-            }
+            } catch (e) { console.error('Email error:', e.message); }
         }
 
         res.status(201).json({ success: true, meeting: { ...meeting, _id: result.insertedId } });
@@ -748,7 +704,7 @@ app.patch('/api/meetings/:id', async (req, res) => {
 });
 
 // ============================================================
-// ==================== TRANSACTIONS APIS =====================
+// ==================== TRANSACTIONS ===========================
 // ============================================================
 
 app.get('/api/transactions/my', async (req, res) => {
@@ -777,7 +733,7 @@ app.get('/api/transactions', async (req, res) => {
 });
 
 // ============================================================
-// ==================== NOTIFICATIONS APIS =====================
+// ==================== NOTIFICATIONS ==========================
 // ============================================================
 
 app.get('/api/notifications', async (req, res) => {
@@ -810,7 +766,7 @@ app.patch('/api/notifications/:id/read', async (req, res) => {
         await notificationsCollection.updateOne({ _id: new ObjectId(id) }, { $set: { is_read: true } });
         res.json({ success: true, message: 'Marked as read' });
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Failed to mark as read' });
+        res.status(500).json({ success: false, message: 'Failed' });
     }
 });
 
@@ -848,64 +804,6 @@ app.get('/api/manager-cycles', async (req, res) => {
     }
 });
 
-app.post('/api/manager-cycles/rotate', async (req, res) => {
-    try {
-        await connectDB();
-        const { newManagerId, managerAccountId } = req.body;
-
-        if (managerAccountId) {
-            const managerAccount = await managerAccountsCollection.findOne({ _id: new ObjectId(managerAccountId) });
-            if (managerAccount?.current_user_id) {
-                await userCollection.updateOne(
-                    { _id: new ObjectId(managerAccount.current_user_id) },
-                    { $set: { role: 'member', updated_at: new Date() } }
-                );
-            }
-            await managerAccountsCollection.updateOne(
-                { _id: new ObjectId(managerAccountId) },
-                { $set: { current_user_id: newManagerId, active: true, updated_at: new Date() } }
-            );
-        }
-
-        await userCollection.updateOne(
-            { _id: new ObjectId(newManagerId) },
-            { $set: { role: 'manager', updated_at: new Date() } }
-        );
-
-        const currentCycle = await managerCyclesCollection.findOne({ active: true });
-        if (currentCycle) {
-            await managerCyclesCollection.updateOne(
-                { _id: currentCycle._id },
-                { $set: { active: false, end_date: new Date().toISOString().split('T')[0], updated_at: new Date() } }
-            );
-        }
-
-        const lastCycle = await managerCyclesCollection.findOne({}, { sort: { cycle_number: -1 } });
-        const cycleNumber = (lastCycle?.cycle_number || 0) + 1;
-        const startDate = new Date().toISOString().split('T')[0];
-        const endDate = new Date();
-        endDate.setMonth(endDate.getMonth() + 6);
-
-        const newCycle = {
-            manager_id: newManagerId, manager_account_id: managerAccountId || null,
-            cycle_number: cycleNumber, start_date: startDate, end_date: endDate.toISOString().split('T')[0],
-            total_collection: 0, total_loans_disbursed: 0, total_savings_generated: 0,
-            active: true, created_at: new Date()
-        };
-
-        const result = await managerCyclesCollection.insertOne(newCycle);
-
-        await transactionHistoryCollection.insertOne({
-            type: 'manager_rotation', member_id: newManagerId, amount: 0,
-            status: 'completed', created_at: new Date()
-        });
-
-        res.status(201).json({ success: true, message: 'Manager rotated', cycle: { ...newCycle, _id: result.insertedId } });
-    } catch (error) {
-        res.status(500).json({ success: false, message: 'Failed to rotate manager' });
-    }
-});
-
 // ============================================================
 // ==================== DASHBOARD APIS ========================
 // ============================================================
@@ -923,8 +821,7 @@ app.get('/api/dashboard/member', async (req, res) => {
         const totalDeposit = depositAgg[0]?.total || 0;
 
         const lastDeposit = await collectionsCollection.findOne(
-            { member_id: memberId, status: 'confirmed' },
-            { sort: { created_at: -1 } }
+            { member_id: memberId, status: 'confirmed' }, { sort: { created_at: -1 } }
         );
 
         const currentMonth = new Date().toISOString().slice(0, 7);
@@ -944,12 +841,9 @@ app.get('/api/dashboard/member', async (req, res) => {
                 currentMonth: {
                     month: new Date().toLocaleString('default', { month: 'long', year: 'numeric' }),
                     amount: currentMonthDeposit?.amount || 200,
-                    status: currentMonthDeposit?.status || 'due',
-                    dueDate: '10th',
+                    status: currentMonthDeposit?.status || 'due', dueDate: '10th',
                 },
-                activeLoan,
-                savings: 0,
-                recentTransactions,
+                activeLoan, savings: 0, recentTransactions,
             }
         });
     } catch (error) {
@@ -962,7 +856,7 @@ app.get('/api/dashboard/manager', async (req, res) => {
         await connectDB();
         const currentMonth = new Date().toISOString().slice(0, 7);
 
-        const totalMembers = await userCollection.countDocuments({ role: 'member', active: true });
+        const totalMembers = await userCollection.countDocuments({ isBlocked: false, role: { $ne: 'admin' } });
         const activeLoans = await loansCollection.countDocuments({ status: 'active' });
         const pendingConfirmations = await collectionsCollection.countDocuments({ status: 'pending', month: currentMonth });
         const pendingLoanRequests = await loanRequestsCollection.countDocuments({ status: 'pending' });
@@ -982,8 +876,7 @@ app.get('/api/dashboard/manager', async (req, res) => {
                 totalCollectionThisMonth: monthCollection[0]?.total || 0,
                 expectedCollection: totalMembers * 200,
                 collectionRate: totalMembers > 0 ? Math.round(((monthCollection[0]?.total || 0) / (totalMembers * 200)) * 100) : 0,
-                fundBalance: monthCollection[0]?.total || 0,
-                dueMembers: 0,
+                fundBalance: monthCollection[0]?.total || 0, dueMembers: 0,
                 recentActivities: activitiesWithNames,
             }
         });
