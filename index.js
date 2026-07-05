@@ -1,4 +1,4 @@
-// server/index.js (FULL BACKEND)
+// server/index.js (FULL BACKEND - Production Ready)
 const express = require('express');
 const app = express();
 const cors = require('cors');
@@ -8,9 +8,34 @@ require('./utils/cronJobs');
 const emailService = require('./utils/emailService');
 
 // ============================================================
-// ==================== MIDDLEWARE ============================
+// ==================== CORS MIDDLEWARE ========================
 // ============================================================
 
+// Manual CORS headers (backup)
+app.use((req, res, next) => {
+    const allowedOrigins = [
+        'https://project-himaloy-client.vercel.app',
+        'https://project-himaloy-server.vercel.app',
+        'http://localhost:3000',
+        'http://localhost:5000',
+    ];
+
+    const origin = req.headers.origin;
+    if (allowedOrigins.includes(origin)) {
+        res.header('Access-Control-Allow-Origin', origin);
+    }
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+
+    next();
+});
+
+// CORS package (primary)
 app.use(cors({
     origin: [
         'http://localhost:3000',
@@ -98,7 +123,7 @@ async function connectDB() {
 connectDB().catch(console.error);
 
 // ============================================================
-// HELPER
+// HELPER FUNCTIONS
 // ============================================================
 
 async function populateMemberNames(items, memberIdField = 'member_id') {
@@ -123,12 +148,12 @@ async function getManagerEmail() {
 }
 
 async function getAllMemberEmails() {
-    const members = await userCollection.find({ active: true }).toArray();
+    const members = await userCollection.find({ isBlocked: false }).toArray();
     return members.filter(m => m.email).map(m => ({ email: m.email, name: m.name }));
 }
 
 async function getUserById(userId) {
-    try { return await userCollection.findOne({ _id: new ObjectId(userId) }); } 
+    try { return await userCollection.findOne({ _id: new ObjectId(userId) }); }
     catch { return null; }
 }
 
@@ -386,7 +411,7 @@ app.get('/api/deposits/due', async (req, res) => {
     try {
         await connectDB();
         const currentMonth = new Date().toISOString().slice(0, 7);
-        const members = await userCollection.find({ role: 'member', active: true }).toArray();
+        const members = await userCollection.find({ isBlocked: false }).toArray();
         const paidMembers = await collectionsCollection.find({ month: currentMonth, status: 'confirmed' }).toArray();
         const paidMemberIds = paidMembers.map(p => p.member_id);
         const dueMembers = members.filter(m => !paidMemberIds.includes(m._id.toString()));
@@ -493,7 +518,7 @@ app.post('/api/loans/requests/:id/voting/start', async (req, res) => {
         await connectDB();
         const { id } = req.params;
         const { managerId } = req.body;
-        const totalMembers = await userCollection.countDocuments({ role: 'member', active: true });
+        const totalMembers = await userCollection.countDocuments({ isBlocked: false });
 
         const voting = {
             loan_request_id: id, manager_id: managerId, phase: 'initial',
@@ -514,7 +539,7 @@ app.post('/api/votings/create', async (req, res) => {
     try {
         await connectDB();
         const { managerId, title, description, type } = req.body;
-        const totalMembers = await userCollection.countDocuments({ role: 'member', active: true });
+        const totalMembers = await userCollection.countDocuments({ isBlocked: false });
 
         const voting = {
             manager_id: managerId, title, description, type: type || 'general',
@@ -834,8 +859,7 @@ app.get('/api/dashboard/member', async (req, res) => {
             dashboard: {
                 totalDeposit,
                 lastDeposit: lastDeposit ? {
-                    amount: lastDeposit.amount,
-                    date: lastDeposit.date || new Date(lastDeposit.created_at).toISOString().split('T')[0],
+                    amount: lastDeposit.amount, date: lastDeposit.date || new Date(lastDeposit.created_at).toISOString().split('T')[0],
                     month: lastDeposit.month,
                 } : null,
                 currentMonth: {
