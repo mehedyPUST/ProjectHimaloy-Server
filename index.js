@@ -168,6 +168,33 @@ app.get('/api/users', async (req, res) => {
     }
 });
 
+
+// server/index.js
+app.patch('/api/admin/remove-manager/:id', async (req, res) => {
+    try {
+        await connectDB();
+        const { id } = req.params;
+
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Invalid ID' });
+        }
+
+        await userCollection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { isManager: false, role: 'member', updatedAt: new Date() } }
+        );
+
+        const user = await userCollection.findOne({ _id: new ObjectId(id) });
+
+        res.json({ 
+            success: true, 
+            message: `${user?.name || 'Member'} removed from manager role` 
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Failed' });
+    }
+});
+
 app.get('/api/users/:id', async (req, res) => {
     try {
         await connectDB();
