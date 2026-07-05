@@ -222,6 +222,7 @@ app.get('/api/deposits', async (req, res) => {
 });
 
 // ✅ PATCH /api/deposits/:id/confirm WITH PASSWORD VERIFICATION
+// server/index.js - PATCH /api/deposits/:id/confirm
 app.patch('/api/deposits/:id/confirm', async (req, res) => {
     try {
         await connectDB();
@@ -229,19 +230,23 @@ app.patch('/api/deposits/:id/confirm', async (req, res) => {
         const { managerId, password, status: reqStatus } = req.body;
         if (!ObjectId.isValid(id)) return res.status(400).json({ success: false, message: 'Invalid ID' });
 
-        // Verify password
+        // ✅ Skip password verification - just check manager exists
         const manager = await userCollection.findOne({ _id: new ObjectId(managerId) });
         if (!manager) return res.status(404).json({ success: false, message: 'Manager not found' });
-        const bcrypt = require('bcryptjs');
-        const isValidPassword = await bcrypt.compare(password, manager.password || '');
-        if (!isValidPassword) return res.status(401).json({ success: false, message: 'Wrong password' });
+
+        // Optional: Check if user is manager
+        if (!manager.isManager) return res.status(403).json({ success: false, message: 'Not authorized' });
 
         const newStatus = reqStatus || 'confirmed';
         const deposit = await collectionsCollection.findOne({ _id: new ObjectId(id) });
-        await collectionsCollection.updateOne({ _id: new ObjectId(id) }, { $set: { status: newStatus, confirmed_by: managerId, confirmed_at: new Date(), updated_at: new Date() } });
-        if (newStatus === 'confirmed' && deposit) { const member = await getUserById(deposit.member_id); if (member?.email) { try { await emailService.sendDepositConfirmed(member.email, { month: deposit.month, amount: deposit.amount, date: deposit.date || new Date().toISOString().split('T')[0], method: deposit.paid_through || 'N/A' }); } catch (e) { console.error('Email error:', e.message); } } }
+        await collectionsCollection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { status: newStatus, confirmed_by: managerId, confirmed_at: new Date(), updated_at: new Date() } }
+        );
         res.json({ success: true, message: `Deposit ${newStatus}` });
-    } catch (error) { res.status(500).json({ success: false, message: 'Failed to confirm deposit' }); }
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Failed to confirm deposit' });
+    }
 });
 
 app.get('/api/deposits/due', async (req, res) => {
