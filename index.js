@@ -16,6 +16,8 @@ app.use(cors({
     origin: [
         'http://localhost:3000',
         'http://localhost:5000',
+        'https://project-himaloy-client.vercel.app',    // ✅ Add this
+        'https://project-himaloy-server.vercel.app',    // ✅ Add this
         process.env.FRONTEND_URL,
         process.env.BETTER_AUTH_URL
     ].filter(Boolean),
@@ -23,7 +25,6 @@ app.use(cors({
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
-
 app.use(express.json());
 
 // ============================================================
