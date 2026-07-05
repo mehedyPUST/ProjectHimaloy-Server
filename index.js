@@ -4,7 +4,7 @@ const app = express();
 const cors = require('cors');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config();
-require('./utils/cronJobs');
+require('./utils/cornJobs');
 const emailService = require('./utils/emailService');
 
 // ============================================================
