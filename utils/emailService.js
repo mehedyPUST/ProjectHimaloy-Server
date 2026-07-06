@@ -1,15 +1,13 @@
-// server/utils/emailService.js
 const nodemailer = require('nodemailer');
 
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_APP_PASSWORD, // Gmail App Password
+        pass: process.env.EMAIL_APP_PASSWORD,
     },
 });
 
-// Verify connection
 transporter.verify((error, success) => {
     if (error) {
         console.error('❌ Email service error:', error);
@@ -39,6 +37,7 @@ const getBaseTemplate = (content) => `
         .info-box strong { color: #1e40af; }
         .warning-box { background: #fef3c7; border: 1px solid #fcd34d; border-radius: 8px; padding: 15px; margin: 15px 0; }
         .success-box { background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 15px; margin: 15px 0; }
+        .error-box { background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; padding: 15px; margin: 15px 0; }
     </style>
 </head>
 <body>
@@ -119,7 +118,32 @@ async function sendLoanApprovedToMember(memberEmail, loanData) {
 }
 
 /**
- * 3. Meeting Called → All Members
+ * 3. Loan Rejected → Member
+ */
+async function sendLoanRejectedToMember(memberEmail, loanData) {
+    const content = `
+        <h2 style="color: #dc2626;">❌ Loan Request Rejected</h2>
+        <p>We regret to inform you that your loan request has been rejected.</p>
+        
+        <div class="error-box">
+            <p><strong>Loan ID:</strong> ${loanData.loanId}</p>
+            <p><strong>Amount:</strong> ৳${loanData.amount.toLocaleString()}</p>
+            <p><strong>Reason:</strong> ${loanData.reason || 'No specific reason provided'}</p>
+        </div>
+
+        <p>If you have any questions, please contact the manager.</p>
+        <a href="${process.env.FRONTEND_URL}/dashboard/member/loans" class="btn">View My Loans →</a>
+    `;
+
+    await sendEmail({
+        to: memberEmail,
+        subject: `❌ Loan Rejected - ${loanData.loanId} (৳${loanData.amount.toLocaleString()})`,
+        html: getBaseTemplate(content),
+    });
+}
+
+/**
+ * 4. Meeting Called → All Members
  */
 async function sendMeetingNotification(members, meetingData) {
     const content = `
@@ -138,7 +162,6 @@ async function sendMeetingNotification(members, meetingData) {
         <p>Please make sure to attend. Your presence is important.</p>
     `;
 
-    // Send to all members
     for (const member of members) {
         await sendEmail({
             to: member.email,
@@ -149,17 +172,17 @@ async function sendMeetingNotification(members, meetingData) {
 }
 
 /**
- * 4. Reminder Before Due Date
+ * 5. Reminder Before Due Date
  */
 async function sendDueDateReminder(memberEmail, reminderData) {
-    const isdeposit = reminderData.type === 'deposit';
+    const isDeposit = reminderData.type === 'deposit';
 
     const content = `
-        <h2 style="color: ${isdeposit ? '#7c3aed' : '#2563eb'};">⏰ ${isdeposit ? 'deposit' : 'Installment'} Reminder</h2>
-        <p>This is a reminder that your ${isdeposit ? 'monthly deposit' : 'loan installment'} is due soon.</p>
+        <h2 style="color: ${isDeposit ? '#7c3aed' : '#2563eb'};">⏰ ${isDeposit ? 'Deposit' : 'Installment'} Reminder</h2>
+        <p>This is a reminder that your ${isDeposit ? 'monthly deposit' : 'loan installment'} is due soon.</p>
         
         <div class="info-box">
-            <p><strong>Type:</strong> ${isdeposit ? 'Monthly deposit' : 'Loan Installment'}</p>
+            <p><strong>Type:</strong> ${isDeposit ? 'Monthly Deposit' : 'Loan Installment'}</p>
             <p><strong>Amount:</strong> ৳${reminderData.amount.toLocaleString()}</p>
             <p><strong>Due Date:</strong> ${new Date(reminderData.dueDate).toLocaleDateString()}</p>
             ${reminderData.loanId ? `<p><strong>Loan ID:</strong> ${reminderData.loanId}</p>` : ''}
@@ -170,22 +193,22 @@ async function sendDueDateReminder(memberEmail, reminderData) {
             <p>⚠️ Please make the payment before the due date to avoid being marked as overdue.</p>
         </div>
 
-        <a href="${process.env.FRONTEND_URL}/dashboard/member/${isdeposit ? 'collections' : 'loans'}" class="btn">Make Payment →</a>
+        <a href="${process.env.FRONTEND_URL}/dashboard/member/${isDeposit ? 'collections' : 'loans'}" class="btn">Make Payment →</a>
     `;
 
     await sendEmail({
         to: memberEmail,
-        subject: `⏰ ${isdeposit ? 'deposit' : 'Installment'} Due: ৳${reminderData.amount.toLocaleString()} - Due ${new Date(reminderData.dueDate).toLocaleDateString()}`,
+        subject: `⏰ ${isDeposit ? 'Deposit' : 'Installment'} Due: ৳${reminderData.amount.toLocaleString()} - Due ${new Date(reminderData.dueDate).toLocaleDateString()}`,
         html: getBaseTemplate(content),
     });
 }
 
 /**
- * 5. deposit Confirmed → Member
+ * 6. Deposit Confirmed → Member
  */
-async function senddepositConfirmed(memberEmail, depositData) {
+async function sendDepositConfirmed(memberEmail, depositData) {
     const content = `
-        <h2 style="color: #16a34a;">✅ deposit Confirmed</h2>
+        <h2 style="color: #16a34a;">✅ Deposit Confirmed</h2>
         <p>Your deposit has been confirmed by the manager.</p>
         
         <div class="success-box">
@@ -201,17 +224,17 @@ async function senddepositConfirmed(memberEmail, depositData) {
 
     await sendEmail({
         to: memberEmail,
-        subject: `✅ deposit Confirmed - ${depositData.month} (৳${depositData.amount.toLocaleString()})`,
+        subject: `✅ Deposit Confirmed - ${depositData.month} (৳${depositData.amount.toLocaleString()})`,
         html: getBaseTemplate(content),
     });
 }
 
 /**
- * 6. deposit Request Submitted → Manager
+ * 7. Deposit Request Submitted → Manager
  */
-async function senddepositRequestToManager(managerEmail, depositData) {
+async function sendDepositRequestToManager(managerEmail, depositData) {
     const content = `
-        <h2 style="color: #7c3aed;">📬 New deposit Request</h2>
+        <h2 style="color: #7c3aed;">📬 New Deposit Request</h2>
         <p>A member has submitted a deposit request.</p>
         
         <div class="info-box">
@@ -225,12 +248,69 @@ async function senddepositRequestToManager(managerEmail, depositData) {
         </div>
 
         <p>Please verify and confirm the deposit.</p>
-        <a href="${process.env.FRONTEND_URL}/dashboard/manager/collections" class="btn">Review deposit →</a>
+        <a href="${process.env.FRONTEND_URL}/dashboard/manager/collections" class="btn">Review Deposit →</a>
     `;
 
     await sendEmail({
         to: managerEmail,
-        subject: `💰 New deposit - ${depositData.memberName} (৳${depositData.amount.toLocaleString()})`,
+        subject: `💰 New Deposit - ${depositData.memberName} (৳${depositData.amount.toLocaleString()})`,
+        html: getBaseTemplate(content),
+    });
+}
+
+/**
+ * 8. Voting Started → All Members
+ */
+async function sendVotingStarted(members, votingData) {
+    const content = `
+        <h2 style="color: #2563eb;">🗳️ Voting Started</h2>
+        <p>A new loan voting has been started by the manager.</p>
+        
+        <div class="info-box">
+            <p><strong>Loan Request:</strong> ${votingData.loanRequestId || 'N/A'}</p>
+            <p><strong>Amount:</strong> ৳${votingData.amount?.toLocaleString() || 'N/A'}</p>
+            <p><strong>Tenure:</strong> ${votingData.tenure || 'N/A'} months</p>
+            <p><strong>Reason:</strong> ${votingData.reason || 'N/A'}</p>
+        </div>
+
+        <p>Please cast your vote (Approve/Deny) at your earliest convenience.</p>
+        <a href="${process.env.FRONTEND_URL}/dashboard/member/votings" class="btn">Go to Voting →</a>
+    `;
+
+    for (const member of members) {
+        await sendEmail({
+            to: member.email,
+            subject: `🗳️ Voting Started - Loan Request (৳${votingData.amount?.toLocaleString() || 'N/A'})`,
+            html: getBaseTemplate(content),
+        });
+    }
+}
+
+/**
+ * 9. Installment Status Update → Member
+ */
+async function sendInstallmentStatusUpdate(memberEmail, installmentData) {
+    const isConfirmed = installmentData.status === 'confirmed';
+    const content = `
+        <h2 style="color: ${isConfirmed ? '#16a34a' : '#dc2626'};">
+            ${isConfirmed ? '✅ Installment Confirmed' : '❌ Installment Rejected'}
+        </h2>
+        <p>Your loan installment has been ${installmentData.status} by the manager.</p>
+        
+        <div class="${isConfirmed ? 'success-box' : 'error-box'}">
+            <p><strong>Installment No:</strong> ${installmentData.installmentNo}</p>
+            <p><strong>Amount:</strong> ৳${installmentData.amount?.toLocaleString() || 'N/A'}</p>
+            <p><strong>Date:</strong> ${installmentData.date}</p>
+            <p><strong>Loan ID:</strong> ${installmentData.loanId?.slice(-8) || 'N/A'}</p>
+            ${!isConfirmed && installmentData.reason ? `<p><strong>Rejection Reason:</strong> ${installmentData.reason}</p>` : ''}
+        </div>
+
+        <a href="${process.env.FRONTEND_URL}/dashboard/member/loans" class="btn">View My Loans →</a>
+    `;
+
+    await sendEmail({
+        to: memberEmail,
+        subject: `${isConfirmed ? '✅' : '❌'} Installment ${installmentData.status} - #${installmentData.installmentNo} (৳${installmentData.amount?.toLocaleString() || ''})`,
         html: getBaseTemplate(content),
     });
 }
@@ -262,8 +342,11 @@ async function sendEmail({ to, subject, html }) {
 module.exports = {
     sendLoanRequestToManager,
     sendLoanApprovedToMember,
+    sendLoanRejectedToMember,
     sendMeetingNotification,
     sendDueDateReminder,
-    senddepositConfirmed,
-    senddepositRequestToManager,
+    sendDepositConfirmed,
+    sendDepositRequestToManager,
+    sendVotingStarted,
+    sendInstallmentStatusUpdate,
 };
