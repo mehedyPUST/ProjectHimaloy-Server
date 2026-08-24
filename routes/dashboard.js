@@ -44,10 +44,14 @@ router.get('/api/dashboard/member', async (req, res) => {
         }
         const recentTransactions = await db.transactionHistoryCollection.find({ member_id: memberId }).sort({ created_at: -1 }).limit(5).toArray();
 
+        const memberUser = await getUserById(memberId);
+        const savingsBalance = memberUser?.savings_balance || 0;
+
         res.json({
             success: true,
             dashboard: {
                 totalDeposit,
+                savingsBalance,
                 lastDeposit: lastDeposit ? {
                     amount: lastDeposit.amount,
                     date: lastDeposit.date || new Date(lastDeposit.created_at).toISOString().split('T')[0],

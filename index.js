@@ -90,6 +90,10 @@ app.use(require('./routes/managerCycles'));
 app.use(require('./routes/dashboard'));
 app.use(require('./routes/fund'));
 app.use(require('./routes/settings'));
+app.use(require('./routes/savings'));
+app.use(require('./routes/members'));
+app.use(require('./routes/community'));
+app.use(require('./routes/messages'));
 
 // ============================================================
 // ==================== EXPORT & START ========================

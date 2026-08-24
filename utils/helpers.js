@@ -72,7 +72,13 @@ async function getAvailableFund() {
     ]).toArray();
     const totalActiveLoans = loanAgg[0]?.total || 0;
 
-    return totalDeposits - totalActiveLoans;
+    const withdrawalAgg = await db.savingsWithdrawalsCollection.aggregate([
+        { $match: { status: 'confirmed' } },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]).toArray();
+    const totalWithdrawals = withdrawalAgg[0]?.total || 0;
+
+    return totalDeposits - totalActiveLoans - totalWithdrawals;
 }
 
 module.exports = {
