@@ -30,8 +30,10 @@ router.patch('/api/manager/set-pin', async (req, res) => {
 
         const hashedPin = await bcrypt.hash(pin, 10);
 
+        const user = await getUserById(managerId);
+        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
         await db.userCollection.updateOne(
-            { _id: new ObjectId(managerId) },
+            { _id: user._id },
             { $set: { managerPin: hashedPin, updatedAt: new Date() } }
         );
 
@@ -46,7 +48,7 @@ router.patch('/api/manager/change-pin', async (req, res) => {
         await connectDB();
         const { managerId, oldPin, newPin } = req.body;
 
-        const manager = await db.userCollection.findOne({ _id: new ObjectId(managerId) });
+        const manager = await getUserById(managerId);
         if (!manager?.managerPin) {
             return res.status(400).json({ success: false, message: 'No PIN set' });
         }
@@ -58,7 +60,7 @@ router.patch('/api/manager/change-pin', async (req, res) => {
 
         const hashedPin = await bcrypt.hash(newPin, 10);
         await db.userCollection.updateOne(
-            { _id: new ObjectId(managerId) },
+            { _id: manager._id },
             { $set: { managerPin: hashedPin, updatedAt: new Date() } }
         );
 

@@ -28,7 +28,7 @@ router.get('/api/messages/conversations', async (req, res) => {
                 const unread = await db.messagesCollection.countDocuments({
                     conversation_id: c._id.toString(),
                     sender_id: { $ne: userId },
-                    read_by: { $ne: userId },
+                    read_by: { $nin: [userId] },
                 });
                 return {
                     _id: c._id,
@@ -87,7 +87,7 @@ router.get('/api/messages/thread', async (req, res) => {
             {
                 conversation_id: convo._id.toString(),
                 sender_id: { $ne: userId },
-                read_by: { $ne: userId },
+                read_by: { $nin: [userId] },
             },
             { $addToSet: { read_by: userId } }
         );

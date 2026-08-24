@@ -47,7 +47,7 @@ router.patch('/api/loans/installments/:id/confirm', async (req, res) => {
 
         if (!ObjectId.isValid(id)) return res.status(400).json({ success: false, message: 'Invalid ID' });
 
-        const manager = await db.userCollection.findOne({ _id: new ObjectId(managerId) });
+        const manager = await getUserById(managerId);
         if (!manager || !manager.isManager) return res.status(403).json({ success: false, message: 'Not authorized' });
         if (!manager.managerPin) return res.status(400).json({ success: false, message: 'Please set your Manager PIN first' });
 

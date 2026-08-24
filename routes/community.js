@@ -168,7 +168,7 @@ router.delete('/api/community/posts/:id', async (req, res) => {
     try {
         await connectDB();
         const { id } = req.params;
-        const { userId } = req.body;
+        const userId = req.body?.userId || req.query?.userId;
         if (!ObjectId.isValid(id)) return res.status(400).json({ success: false, message: 'Invalid ID' });
         const post = await db.communityPostsCollection.findOne({ _id: new ObjectId(id) });
         if (!post) return res.status(404).json({ success: false, message: 'Not found' });

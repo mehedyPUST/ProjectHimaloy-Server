@@ -1,21 +1,21 @@
 const { MongoClient, ServerApiVersion } = require('mongodb');
 require('dotenv').config();
 
-const uri = process.env.MONGODB_URI;
-if (!uri) throw new Error('MONGODB_URI is not defined');
+const uri = process.env.MONGODB_URI || '';
 
-const client = new MongoClient(uri, {
-    serverApi: {
-        version: ServerApiVersion.v1,
-        strict: false,
-        deprecationErrors: true
-    }
-});
+const client = uri
+    ? new MongoClient(uri, {
+          serverApi: {
+              version: ServerApiVersion.v1,
+              strict: false,
+              deprecationErrors: true,
+          },
+      })
+    : null;
 
 /** @type {import('mongodb').Db | null} */
 let db = null;
 
-// Mutable collection refs — assigned in connectDB so require() consumers always see live values
 const state = {
     userCollection: null,
     collectionsCollection: null,
@@ -37,11 +37,15 @@ const state = {
 };
 
 async function connectDB() {
-    try {
-        if (db) return state;
+    if (db) return state;
 
+    if (!uri || !client) {
+        throw new Error('MONGODB_URI is not defined');
+    }
+
+    try {
         await client.connect();
-        db = client.db(process.env.MONGODB_DB);
+        db = client.db(process.env.MONGODB_DB || 'projecthimaloy');
 
         state.userCollection = db.collection('user');
         state.collectionsCollection = db.collection('monthly_deposits');
@@ -61,11 +65,16 @@ async function connectDB() {
         state.messagesCollection = db.collection('messages');
         state.conversationsCollection = db.collection('conversations');
 
-        await client.db('admin').command({ ping: 1 });
+        try {
+            await client.db('admin').command({ ping: 1 });
+        } catch (_) {
+            /* ping optional */
+        }
         console.log('✅ MongoDB connected!');
         return state;
     } catch (error) {
-        console.error('❌ MongoDB error:', error);
+        console.error('❌ MongoDB error:', error.message);
+        db = null;
         throw error;
     }
 }
@@ -79,9 +88,7 @@ module.exports = {
     client,
     connectDB,
     getDb,
-    // Live refs via state object (same object identity after require)
     state,
-    // Direct property access for convenience — these are getters on the exports object
     get userCollection() { return state.userCollection; },
     get collectionsCollection() { return state.collectionsCollection; },
     get loansCollection() { return state.loansCollection; },

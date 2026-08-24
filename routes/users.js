@@ -51,14 +51,12 @@ router.get('/api/users/:id', async (req, res) => {
     try {
         await connectDB();
         const { id } = req.params;
-        let query = {};
-        if (ObjectId.isValid(id)) query._id = new ObjectId(id);
-        else query._id = id;
-
-        const user = await db.userCollection.findOne(query);
+        const user = await getUserById(id);
         if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-        const { password, ...safeUser } = user;
+        const { password, managerPin, ...safeUser } = user;
+        // expose whether PIN is set without revealing hash
+        if (managerPin) safeUser.managerPin = true;
         res.json({ success: true, user: safeUser });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Failed to fetch user' });
@@ -70,9 +68,8 @@ router.patch('/api/users/:id', async (req, res) => {
         await connectDB();
         const { id } = req.params;
         const { name, phone, dateOfBirth, image, role, isBlocked } = req.body;
-        let query = {};
-        if (ObjectId.isValid(id)) query._id = new ObjectId(id);
-        else query._id = id;
+        const existing = await getUserById(id);
+        if (!existing) return res.status(404).json({ success: false, message: 'User not found' });
 
         const updateData = { updatedAt: new Date() };
         if (name !== undefined) updateData.name = name;
@@ -82,8 +79,7 @@ router.patch('/api/users/:id', async (req, res) => {
         if (role !== undefined) updateData.role = role;
         if (isBlocked !== undefined) updateData.isBlocked = isBlocked;
 
-        const result = await db.userCollection.updateOne(query, { $set: updateData });
-        if (result.matchedCount === 0) return res.status(404).json({ success: false, message: 'User not found' });
+        await db.userCollection.updateOne({ _id: existing._id }, { $set: updateData });
         res.json({ success: true, message: 'Updated' });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Failed to update user' });

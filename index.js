@@ -99,6 +99,12 @@ app.use(require('./routes/messages'));
 // ==================== EXPORT & START ========================
 // ============================================================
 
+// Global error handler
+app.use((err, req, res, next) => {
+    console.error('Unhandled error:', err);
+    res.status(500).json({ success: false, message: err.message || 'Internal server error' });
+});
+
 module.exports = app;
 
 if (require.main === module) {

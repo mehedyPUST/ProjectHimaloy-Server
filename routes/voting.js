@@ -206,7 +206,7 @@ router.patch('/api/votings/:id/close', async (req, res) => {
         }
 
         // Validate manager
-        const manager = await db.userCollection.findOne({ _id: new ObjectId(managerId) });
+        const manager = await getUserById(managerId);
         if (!manager || !manager.isManager) {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }

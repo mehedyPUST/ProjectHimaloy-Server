@@ -126,7 +126,7 @@ router.patch('/api/deposits/:id/confirm', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Invalid ID' });
         }
 
-        const manager = await db.userCollection.findOne({ _id: new ObjectId(managerId) });
+        const manager = await getUserById(managerId);
         if (!manager) return res.status(404).json({ success: false, message: 'Manager not found' });
         if (!manager.isManager) return res.status(403).json({ success: false, message: 'Not authorized' });
 

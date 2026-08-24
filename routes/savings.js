@@ -101,7 +101,7 @@ router.post('/api/savings/withdraw', async (req, res) => {
 
         // Deduct savings
         await db.userCollection.updateOne(
-            { _id: new ObjectId(memberId) },
+            { _id: user._id },
             {
                 $inc: { savings_balance: -amt },
                 $set: { updatedAt: new Date() },
